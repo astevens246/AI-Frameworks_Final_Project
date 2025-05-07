@@ -86,14 +86,18 @@ def get_golfer_profile_summary(self, golfer_id: str) -> str:
 # Example usage
 if __name__ == "__main__":
     coach = GolfCoachAgent()
-    session_id = "player_123"
+    golfer_id = "player_123"
     
     # First interaction
-    print("USER: I'm struggling with my slice off the tee. Any advice?")
-    response = coach.coach("I'm struggling with my slice off the tee. Any advice?", session_id)
+    print("USER: I'm a beginner with a 20 handicap and I'm struggling with my slice off the tee. Any advice?")
+    response = coach.coach("I'm a beginner with a 20 handicap and I'm struggling with my slice off the tee. Any advice?", golfer_id)
     print(f"GOLF COACH: {response}")
     
     # Second interaction - The agent should remember context
     print("\nUSER: Would changing my grip help with that issue?")
-    response = coach.coach("Would changing my grip help with that issue?", session_id)
+    response = coach.coach("Would changing my grip help with that issue?", golfer_id)
     print(f"GOLF COACH: {response}")
+    
+    # Show the golfer profile that's been built
+    print("\n--- Golfer Profile Built So Far ---")
+    print(json.dumps(coach.golfer_profiles[golfer_id], indent=2))
