@@ -7,6 +7,8 @@ import os
 import json
 import time
 import datetime
+import pickle
+import pathlib
 
 # Load environment variables
 load_dotenv()
@@ -19,14 +21,21 @@ class GolfCoachAgent:
     #20 Simple Conversational, #22 Memory-Enhanced, #23 Self-Improving, #24 Multi-Persona
     """
 
-    def __init__(self, model_name="gpt-4o-mini", temperature=0.2):
+    def __init__(
+        self, model_name="gpt-4o-mini", temperature=0.2, data_dir="coach_data"
+    ):
         self.llm = ChatOpenAI(
             model=model_name, max_tokens=1000, temperature=temperature
         )
 
+        # Set up data directory for persistence
+        self.data_dir = pathlib.Path(data_dir)
+        self.data_dir.mkdir(exist_ok=True)
+
         # Memory stores
         self.session_store = {}  # Conversation histories
         self.golfer_profiles = {}  # Long-term memory profiles
+        self.last_interactions = {}  # Store last interactions for each golfer
 
         # Knowledge and personas
         self.coaching_personas = {
@@ -44,6 +53,9 @@ class GolfCoachAgent:
             ],
             "effective_tips": [],  # Will be populated through reflection
         }
+
+        # Load persisted data if it exists
+        self._load_data()
 
         # Create the prompt and chain
         self.prompt = ChatPromptTemplate.from_messages(
@@ -67,9 +79,6 @@ class GolfCoachAgent:
         # Rate limiting
         self.last_request_time = 0
         self.min_request_interval = 0.5
-
-        # Last interaction summary
-        self.last_interactions = {}  # Store last interactions for each golfer
 
     def get_chat_history(self, session_id):
         """Get or create chat history for this session"""
@@ -245,16 +254,23 @@ class GolfCoachAgent:
                         self.golfer_profiles[golfer_id][category], list
                     ):
                         # For lists, add new items without duplicates
-                        self.golfer_profiles[golfer_id][category] = list(
-                            set(self.golfer_profiles[golfer_id][category] + value)
-                        )
+                        if all(isinstance(item, str) for item in value):
+                            self.golfer_profiles[golfer_id][category] = list(
+                                set(self.golfer_profiles[golfer_id][category] + value)
+                            )
                     elif isinstance(value, dict) and isinstance(
                         self.golfer_profiles[golfer_id][category], dict
                     ):
                         # For dictionaries, update with new key-values
                         self.golfer_profiles[golfer_id][category].update(value)
                     elif value:  # For strings/other types, replace if not empty
-                        self.golfer_profiles[golfer_id][category] = value
+                        if category in ["swing_issues", "goals"] and isinstance(
+                            value, str
+                        ):
+                            # Convert string to list item instead of individual characters
+                            self.golfer_profiles[golfer_id][category] = [value]
+                        else:
+                            self.golfer_profiles[golfer_id][category] = value
             except json.JSONDecodeError:
                 print(f"Failed to parse JSON: {json_str}")
 
@@ -346,16 +362,96 @@ class GolfCoachAgent:
             print(f"Error generating summary: {e}")
             return "Unable to generate summary of last interaction."
 
+    def _load_data(self):
+        """Load persisted data from disk"""
+        try:
+            # Load golfer profiles
+            profiles_path = self.data_dir / "golfer_profiles.json"
+            if profiles_path.exists():
+                with open(profiles_path, "r") as f:
+                    self.golfer_profiles = json.load(f)
+
+            # Load coaching knowledge
+            knowledge_path = self.data_dir / "coaching_knowledge.json"
+            if knowledge_path.exists():
+                with open(knowledge_path, "r") as f:
+                    self.coaching_knowledge = json.load(f)
+
+            # Load last interactions
+            interactions_path = self.data_dir / "last_interactions.json"
+            if interactions_path.exists():
+                with open(interactions_path, "r") as f:
+                    self.last_interactions = json.load(f)
+                    
+            # Load session history if it exists
+            history_path = self.data_dir / "session_history.pkl"
+            if history_path.exists():
+                with open(history_path, "rb") as f:
+                    try:
+                        self.session_store = pickle.load(f)
+                    except Exception as e:
+                        print(f"Error loading session history: {e}")
+
+            print(f"Loaded data from {self.data_dir}")
+        except Exception as e:
+            print(f"Warning: Failed to load persisted data: {e}")
+
+    def save_data(self):
+        """Save data to disk for persistence across sessions"""
+        try:
+            # Save golfer profiles
+            profiles_path = self.data_dir / "golfer_profiles.json"
+            with open(profiles_path, "w") as f:
+                json.dump(self.golfer_profiles, f, indent=2)
+
+            # Save coaching knowledge
+            knowledge_path = self.data_dir / "coaching_knowledge.json"
+            with open(knowledge_path, "w") as f:
+                json.dump(self.coaching_knowledge, f, indent=2)
+
+            # Save last interactions
+            interactions_path = self.data_dir / "last_interactions.json"
+            with open(interactions_path, "w") as f:
+                json.dump(self.last_interactions, f, indent=2)
+                
+            # Save session history
+            history_path = self.data_dir / "session_history.pkl"
+            with open(history_path, "wb") as f:
+                pickle.dump(self.session_store, f)
+
+            print(f"Data saved to {self.data_dir}")
+        except Exception as e:
+            print(f"Warning: Failed to save data: {e}")
+
 
 # Example usage
 if __name__ == "__main__":
+    # Get golfer ID with validation to prevent command names from being used as IDs
+    reserved_commands = [
+        "profile",
+        "knowledge",
+        "summary",
+        "last",
+        "quit",
+        "exit",
+        "bye",
+    ]
+
+    while True:
+        golfer_id = (
+            input(
+                "Enter your golfer ID (or press Enter for default 'player_123'): "
+            ).strip()
+            or "player_123"
+        )
+        if golfer_id.lower() in reserved_commands:
+            print(
+                f"'{golfer_id}' is a reserved command name. Please choose a different ID."
+            )
+        else:
+            break
+
     coach = GolfCoachAgent()
-    golfer_id = (
-        input(
-            "Enter your golfer ID (or press Enter for default 'player_123'): "
-        ).strip()
-        or "player_123"
-    )
 
     print("\n=== Golf Coach AI ===")
     print("Welcome to your personalized golf coaching session!")
@@ -363,6 +459,7 @@ if __name__ == "__main__":
     print(
         "Type 'profile' to see your current profile or 'knowledge' to see coaching insights."
     )
+    print("Type 'summary' or 'last' to see a summary of your last interaction.")
     print("=" * 21)
 
     try:
@@ -434,3 +531,6 @@ if __name__ == "__main__":
                 print(
                     f"Goals identified: {', '.join(coach.golfer_profiles[golfer_id]['goals'])}"
                 )
+
+        # Save data for persistence between sessions
+        coach.save_data()
