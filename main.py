@@ -302,36 +302,81 @@ class GolfCoachAgent:
 # Example usage
 if __name__ == "__main__":
     coach = GolfCoachAgent()
-    golfer_id = "player_123"
+    golfer_id = (
+        input(
+            "Enter your golfer ID (or press Enter for default 'player_123'): "
+        ).strip()
+        or "player_123"
+    )
 
-    # First interaction
+    print("\n=== Golf Coach AI ===")
+    print("Welcome to your personalized golf coaching session!")
+    print("Ask me any questions about your golf game or type 'quit' to exit.")
     print(
-        "USER: I'm a beginner with a 20 handicap and I'm struggling with my slice off the tee. Any advice?"
+        "Type 'profile' to see your current profile or 'knowledge' to see coaching insights."
     )
-    response = coach.coach(
-        "I'm a beginner with a 20 handicap and I'm struggling with my slice off the tee. Any advice?",
-        golfer_id,
-    )
-    print(f"GOLF COACH: {response}")
+    print("=" * 21)
 
-    # Second interaction
-    print("\nUSER: Would changing my grip help with that issue?")
-    response = coach.coach("Would changing my grip help with that issue?", golfer_id)
-    print(f"GOLF COACH: {response}")
+    try:
+        while True:
+            # Get user input
+            user_input = input("\nYOU: ").strip()
 
-    # Third interaction
-    print(
-        "\nUSER: I've been playing for 3 months and I want to break 90 within a year."
-    )
-    response = coach.coach(
-        "I've been playing for 3 months and I want to break 90 within a year.",
-        golfer_id,
-    )
-    print(f"GOLF COACH: {response}")
+            # Check for exit command
+            if user_input.lower() in ["quit", "exit", "bye"]:
+                print(
+                    "\nGOLF COACH: Thanks for the session! Keep practicing and see you on the course!"
+                )
+                break
 
-    # Show results
-    print("\n--- Golfer Profile Built So Far ---")
-    print(json.dumps(coach.golfer_profiles[golfer_id], indent=2))
+            # Check for profile command
+            elif user_input.lower() == "profile":
+                print("\n--- Your Golfer Profile ---")
+                if golfer_id in coach.golfer_profiles:
+                    print(json.dumps(coach.golfer_profiles[golfer_id], indent=2))
+                else:
+                    print("No profile built yet. Start asking golf questions!")
+                continue
 
-    print("\n--- Coaching Knowledge Built So Far ---")
-    print(json.dumps(coach.coaching_knowledge, indent=2))
+            # Check for knowledge command
+            elif user_input.lower() == "knowledge":
+                print("\n--- Coaching Knowledge Base ---")
+                print(json.dumps(coach.coaching_knowledge, indent=2))
+                continue
+
+            # Normal coaching interaction
+            if not user_input:
+                print("Please ask a question about your golf game.")
+                continue
+
+            # Get and display response
+            print("\nGOLF COACH:", end=" ")
+
+            # For a smoother experience, print a thinking message
+            # while the model generates a response
+            response = coach.coach(user_input, golfer_id)
+            print(response)
+
+    except KeyboardInterrupt:
+        print("\n\nSession ended. Thanks for using Golf Coach AI!")
+    finally:
+        # Show a summary at the end
+        if (
+            golfer_id in coach.golfer_profiles
+            and coach.golfer_profiles[golfer_id].get("interaction_count", 0) > 0
+        ):
+            print("\n--- Session Summary ---")
+            print(
+                f"Total interactions: {coach.golfer_profiles[golfer_id].get('interaction_count', 0)}"
+            )
+            print(
+                f"Identified skill level: {coach.golfer_profiles[golfer_id].get('skill_level', 'beginner')}"
+            )
+            if coach.golfer_profiles[golfer_id].get("swing_issues"):
+                print(
+                    f"Swing issues discussed: {', '.join(coach.golfer_profiles[golfer_id]['swing_issues'])}"
+                )
+            if coach.golfer_profiles[golfer_id].get("goals"):
+                print(
+                    f"Goals identified: {', '.join(coach.golfer_profiles[golfer_id]['goals'])}"
+                )
