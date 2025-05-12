@@ -68,6 +68,9 @@ class GolfCoachAgent:
         self.last_request_time = 0
         self.min_request_interval = 0.5
 
+        # Last interaction summary
+        self.last_interactions = {}  # Store last interactions for each golfer
+
     def get_chat_history(self, session_id):
         """Get or create chat history for this session"""
         if session_id not in self.session_store:
@@ -98,6 +101,13 @@ class GolfCoachAgent:
         # Update knowledge
         self._update_profile(golfer_id, input_text)
         self._reflect_on_interaction(input_text, response.content, golfer_id)
+
+        # Store this interaction for summary feature
+        self.last_interactions[golfer_id] = {
+            "user_input": input_text,
+            "coach_response": response.content,
+            "timestamp": datetime.datetime.now().isoformat(),
+        }
 
         return response.content
 
@@ -298,6 +308,44 @@ class GolfCoachAgent:
         except Exception as e:
             print(f"Error during reflection: {e}")
 
+    def get_last_interaction_summary(self, golfer_id):
+        """Generate a summary of the last interaction"""
+        if golfer_id not in self.last_interactions:
+            return "No previous interactions found."
+
+        try:
+            last = self.last_interactions[golfer_id]
+
+            # Generate a summary using the LLM
+            summary_prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """Create a concise summary of this golf coaching interaction.
+                Highlight:
+                1. The main question or issue raised
+                2. Key advice or tips provided
+                3. Any specific techniques or drills suggested
+                4. Next steps if any were mentioned
+                
+                Keep it brief but actionable.
+                """,
+                    ),
+                    (
+                        "human",
+                        f"USER: {last['user_input']}\n\nCOACH: {last['coach_response']}",
+                    ),
+                ]
+            )
+
+            summary_chain = summary_prompt | self.llm
+            result = summary_chain.invoke({})
+
+            return result.content
+        except Exception as e:
+            print(f"Error generating summary: {e}")
+            return "Unable to generate summary of last interaction."
+
 
 # Example usage
 if __name__ == "__main__":
@@ -342,6 +390,12 @@ if __name__ == "__main__":
             elif user_input.lower() == "knowledge":
                 print("\n--- Coaching Knowledge Base ---")
                 print(json.dumps(coach.coaching_knowledge, indent=2))
+                continue
+
+            # Check for summary command
+            elif user_input.lower() in ["summary", "last"]:
+                print("\n--- Last Interaction Summary ---")
+                print(coach.get_last_interaction_summary(golfer_id))
                 continue
 
             # Normal coaching interaction
