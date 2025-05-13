@@ -109,3 +109,9 @@ This launches the text-based interface in your terminal. Follow the prompts to i
 
 You can modify the AI model and other parameters by editing the `GolfCoachAgent` class initialization in `main.py`. By default, the application uses the "gpt-3.5-turbo" model, but you can switch to other OpenAI models like "gpt-4o" for potentially better results (requires appropriate API access).
 
+## Credits and References
+
+This project was built with guidance from:
+
+- The Streamlit tutorial on building conversational apps: [Build conversational apps](https://docs.streamlit.io/develop/tutorials/chat-and-llm-apps/build-conversational-apps)
+

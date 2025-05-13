@@ -89,7 +89,6 @@ with st.sidebar:
         - How can I improve my swing?
         - What's the best way to practice putting?
         - How do I reduce my slice?
-        - What clubs should I use for different distances?
         - Tips for course management?
     """
     )

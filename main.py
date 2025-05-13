@@ -120,7 +120,7 @@ class GolfCoachAgent:
 
         # Learn from interaction
         self._update_long_term_memory(golfer_id, input_text, response.content)
-        if self.golfer_profiles[golfer_id].get("interaction_count", 0) % 5 == 0:
+        if self.golfer_profiles[golfer_id].get("interaction_count", 0) % 3 == 0:
             self._reflect_and_improve(golfer_id)
 
         # Save all data
