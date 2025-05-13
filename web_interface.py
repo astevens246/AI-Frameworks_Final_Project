@@ -6,7 +6,17 @@ from main import GolfCoachAgent
 # Page configuration
 st.set_page_config(page_title="Golf Coach AI", page_icon="🏌️", layout="centered")
 
-# Simple styling
+"""
+Golf Coach AI - Streamlit Web Interface
+
+This file implements a web-based interface for the Golf Coach AI using Streamlit.
+It provides a user-friendly way to interact with the coach through a web browser,
+with tabs for chat, profile information, and memory exploration.
+
+The interface was built using concepts from the Streamlit conversational apps tutorial.
+"""
+
+# Simple styling with CSS 
 st.markdown(
     """
 <style>
@@ -25,14 +35,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Initialize session state
+# Initialize session state variables to persist data between reruns
+# This is important for maintaining conversation history and user preferences
 for key, default in [
-    ("messages", []),
-    ("coach", GolfCoachAgent()),
-    ("golfer_id", "default_user"),
-    ("active_tab", "Chat"),
-    ("show_memory", False),
-    ("skill_level_set", False),
+    ("messages", []),  # Stores chat messages for display
+    ("coach", GolfCoachAgent()),  # Main AI coach instance
+    ("golfer_id", "default_user"),  # User identifier
+    ("active_tab", "Chat"),  # Currently active tab
+    ("show_memory", False),  # Toggle for showing memory in chat view
+    ("skill_level_set", False),  # Flag to track if skill level has been set
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -44,23 +55,26 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Main tabs
+# Main tabs for different views of the application
 tabs = st.tabs(["Chat", "Profile", "Memory"])
 tab_names = ["Chat", "Profile", "Memory"]
 active_tab_index = tab_names.index(st.session_state.active_tab)
 
-# Sidebar for user info
+# Sidebar for user info and settings
 with st.sidebar:
     st.header("Golfer Information")
+
+    # User identification input
     new_golfer_id = st.text_input("Golfer ID:", value=st.session_state.golfer_id)
 
+    # Handle golfer ID changes - reset conversation for new users
     if new_golfer_id != st.session_state.golfer_id:
         st.session_state.golfer_id = new_golfer_id
         st.session_state.messages = []
         st.session_state.skill_level_set = False
         st.rerun()
 
-    # Show profile info summary
+    # Show profile summary in sidebar if available
     if st.session_state.golfer_id in st.session_state.coach.golfer_profiles:
         profile = st.session_state.coach.golfer_profiles[st.session_state.golfer_id]
         st.subheader("Your Profile")
@@ -72,7 +86,7 @@ with st.sidebar:
             for issue in profile.get("swing_issues", []):
                 st.write(f"- {issue}")
 
-    # Memory toggle
+    # Memory display toggle
     st.divider()
     memory_toggle = st.checkbox(
         "Show Coach's Memory",
@@ -83,7 +97,7 @@ with st.sidebar:
         st.session_state.show_memory = memory_toggle
         st.rerun()
 
-    # Useful information section
+    # Common questions suggestions to help users get started
     st.divider()
     st.subheader("Common Golf Questions")
     st.markdown(
@@ -96,14 +110,16 @@ with st.sidebar:
     )
 
 
-# Helper functions
+# Helper functions for common UI tasks
 def display_memory_items(memory_items, title="What I Remember:"):
+    """Displays memory items with consistent formatting"""
     st.markdown(f"<div class='memory-title'>{title}</div>", unsafe_allow_html=True)
     for item in memory_items:
         st.markdown(f"<div class='memory-box'>{item}</div>", unsafe_allow_html=True)
 
 
 def display_messages():
+    """Displays all messages in the conversation history"""
     for message in st.session_state.messages:
         role, content = message["role"], message["content"]
         st.markdown(
@@ -112,7 +128,8 @@ def display_messages():
         )
 
 
-# Check if skill level needs to be set
+# Skill level selection prompt for new users
+# This is a feature added to personalize coaching from the start
 golfer_id = st.session_state.golfer_id
 needs_skill_level = (
     golfer_id not in st.session_state.coach.golfer_profiles
@@ -182,11 +199,13 @@ if needs_skill_level:
     st.stop()  # Stop execution until skill level is selected
 
 
-# CHAT TAB
+# ----------------------------------------------------------------------------------
+# CHAT TAB - Main conversational interface for interacting with the coach
+# ----------------------------------------------------------------------------------
 with tabs[0]:
     st.session_state.active_tab = "Chat"
 
-    # Show memory if enabled
+    # Display long-term memory if enabled
     if (
         st.session_state.show_memory
         and st.session_state.golfer_id in st.session_state.coach.long_term_memory
@@ -198,35 +217,38 @@ with tabs[0]:
             with st.expander("Coach's Memory", expanded=True):
                 display_memory_items(memory_items)
 
-    # Display chat messages
+    # Display the conversation history
     display_messages()
 
     # Input area for new messages
     user_input = st.chat_input("Ask your golf coach...")
 
+    # Process new user input when submitted
     if user_input:
-        # Add user message to chat
+        # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": user_input})
 
-        # Show thinking message
+        # Show status indicator while generating response
         with st.status("⛳ Analyzing your golf question...", expanded=True) as status:
             time.sleep(0.5)  # Small delay for UI effect
             status.update(label="🏌️‍♂️ Your golf coach is thinking...", state="running")
 
-            # Get AI response
+            # Get AI response from the coach
             response = st.session_state.coach.coach(
                 user_input, st.session_state.golfer_id
             )
 
             status.update(label="✅ Response ready!", state="complete")
 
-        # Add coach response to chat
+        # Add coach response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Force refresh
+        # Force refresh to show new messages
         st.rerun()
 
-# PROFILE TAB
+# ----------------------------------------------------------------------------------
+# PROFILE TAB - Displays the golfer's profile information
+# ----------------------------------------------------------------------------------
 with tabs[1]:
     st.session_state.active_tab = "Profile"
 
@@ -235,6 +257,7 @@ with tabs[1]:
 
         st.subheader("Your Golf Profile")
 
+        # Display key metrics
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Skill Level", profile.get("skill_level", "Unknown").capitalize())
@@ -261,6 +284,7 @@ with tabs[1]:
             else:
                 st.info(empty_msg)
 
+        # Show most recent activity
         if profile.get("last_message"):
             st.markdown("### Recent Activity")
             st.write("Last question you asked:")
@@ -270,14 +294,18 @@ with tabs[1]:
             "No profile built yet. Start asking golf questions to build your profile!"
         )
 
-# MEMORY TAB
+# ----------------------------------------------------------------------------------
+# MEMORY TAB - Shows the coach's memory and generated insights
+# ----------------------------------------------------------------------------------
 with tabs[2]:
     st.session_state.active_tab = "Memory"
 
     st.subheader("Coach's Memory & Learning")
 
+    # Two-column layout for memory and insights
     col1, col2 = st.columns(2)
 
+    # Long-term memory column
     with col1:
         st.markdown("### Long-term Memory")
         memory_items = st.session_state.coach.long_term_memory.get(
@@ -289,6 +317,7 @@ with tabs[2]:
         else:
             st.info("No long-term memories stored yet.")
 
+    # Coaching insights column - from self-reflection
     with col2:
         st.markdown("### Coaching Insights")
         insights = st.session_state.coach.coaching_insights.get(
@@ -301,6 +330,7 @@ with tabs[2]:
         else:
             st.info("No coaching insights generated yet.")
 
+    # Last interaction summary section
     st.markdown("### Last Interaction")
     if st.session_state.golfer_id in st.session_state.coach.last_interactions:
         last = st.session_state.coach.last_interactions[st.session_state.golfer_id]

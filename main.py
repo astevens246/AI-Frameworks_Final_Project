@@ -20,6 +20,14 @@ class GolfCoachAgent:
     def __init__(
         self, model_name="gpt-3.5-turbo", temperature=0.5, data_dir="coach_data"
     ):
+        """
+        Initialize the Golf Coach AI with language model and memory systems.
+
+        Args:
+            model_name: The OpenAI model to use (default: gpt-3.5-turbo)
+            temperature: Controls randomness in responses (0.0-1.0)
+            data_dir: Directory for storing conversation and profile data
+        """
         # Initialize core components
         self.llm = ChatOpenAI(
             model=model_name, max_tokens=1000, temperature=temperature
@@ -27,12 +35,14 @@ class GolfCoachAgent:
         self.data_dir = pathlib.Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
 
-        # Initialize data stores
-        self.session_store = {}
-        self.golfer_profiles = {}
-        self.last_interactions = {}
-        self.long_term_memory = {}
-        self.coaching_insights = {}
+        # Initialize memory and data storage systems
+        self.session_store = {}  # Short-term memory: Stores current conversation
+        self.golfer_profiles = {}  # User profiles: Skill level, swing issues, goals
+        self.last_interactions = {}  # Recent interactions for reference
+        self.long_term_memory = {}  # Long-term memory across sessions
+        self.coaching_insights = {}  # Self-improvement insights
+
+        # Default coaching knowledge
         self.coaching_knowledge = self._load_json("coaching_knowledge.json") or {
             "common_mistakes": [
                 "Over-swinging",
@@ -43,7 +53,7 @@ class GolfCoachAgent:
             "effective_tips": [],
         }
 
-        # Load all data
+        # Load all data from storage
         for store_name in [
             "profiles",
             "last_interactions",
@@ -53,7 +63,8 @@ class GolfCoachAgent:
         ]:
             getattr(self, f"_load_{store_name}")()
 
-        # Set up the conversation prompt and chain
+        # Set up the conversation prompt template and chain
+        # This template includes system instructions, profile info, and memory context
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -67,6 +78,7 @@ class GolfCoachAgent:
             ]
         )
 
+        # Create the language model processing chain with history management
         self.chain = self.prompt | self.llm
         self.chain_with_history = RunnableWithMessageHistory(
             self.chain,
@@ -76,13 +88,32 @@ class GolfCoachAgent:
         )
 
     def get_chat_history(self, session_id):
-        """Get or create chat history for this session"""
+        """
+        Retrieve or create conversation history for a specific user session.
+        This provides short-term memory for the current conversation.
+        """
         if session_id not in self.session_store:
             self.session_store[session_id] = ChatMessageHistory()
         return self.session_store[session_id]
 
     def coach(self, input_text, golfer_id):
-        """Main method to interact with the golf coach"""
+        """
+        Main interaction method - processes user input and generates a coaching response.
+
+        This method:
+        1. Updates the golfer's profile based on their input
+        2. Retrieves contextual information (profile, memories, insights)
+        3. Generates a response using the language model
+        4. Updates long-term memory with important information
+        5. Periodically triggers self-reflection to improve coaching
+
+        Args:
+            input_text: The user's question or statement
+            golfer_id: Unique identifier for the user
+
+        Returns:
+            The coach's response as a string
+        """
         # Initialize profile if needed
         if golfer_id not in self.golfer_profiles:
             self.golfer_profiles[golfer_id] = {
@@ -96,7 +127,7 @@ class GolfCoachAgent:
         )
         self._update_profile(golfer_id, input_text)
 
-        # Get response with context
+        # Get response with context from memory and profile
         response = self.chain_with_history.invoke(
             {
                 "input": input_text,
@@ -118,8 +149,10 @@ class GolfCoachAgent:
             "coach_response": response.content,
         }
 
-        # Learn from interaction
+        # Learn from interaction by updating long-term memory
         self._update_long_term_memory(golfer_id, input_text, response.content)
+
+        # Trigger reflection process every 3 interactions instead of 5
         if self.golfer_profiles[golfer_id].get("interaction_count", 0) % 3 == 0:
             self._reflect_and_improve(golfer_id)
 
@@ -129,14 +162,26 @@ class GolfCoachAgent:
         return response.content
 
     def get_last_interaction_summary(self, golfer_id):
-        """Get a summary of the last interaction with this golfer"""
+        """
+        Returns a summary of the last interaction with a specific golfer.
+        Used for displaying the most recent conversation to the user.
+        """
         if golfer_id not in self.last_interactions:
             return "No previous interactions found."
         last = self.last_interactions[golfer_id]
         return f"Time: {last['timestamp']}\nYOU: {last['user_input']}\nCOACH: {last['coach_response']}"
 
     def _update_profile(self, golfer_id, input_text):
-        """Update profile based on input text"""
+        """
+        Updates the golfer's profile based on information in their message.
+
+        Detects and tracks:
+        - Skill level (beginner, intermediate, advanced)
+        - Swing issues (slice, hook, etc.)
+        - Golf goals (distance, accuracy, etc.)
+
+        This automated profile building helps personalize coaching advice.
+        """
         # Create profile structure if needed
         if golfer_id not in self.golfer_profiles:
             self.golfer_profiles[golfer_id] = {
@@ -154,7 +199,7 @@ class GolfCoachAgent:
         # Store last message
         profile["last_message"] = input_text
 
-        # Detect skill level
+        # Detect skill level from keywords in message
         lower_input = input_text.lower()
         if any(
             term in lower_input for term in ["beginner", "new to golf", "just started"]
@@ -167,7 +212,7 @@ class GolfCoachAgent:
         ):
             profile["skill_level"] = "advanced"
 
-        # Detect swing issues
+        # Detect swing issues using keyword mapping
         issues_map = {
             "slice": ["slice"],
             "hook": ["hook"],
@@ -185,7 +230,7 @@ class GolfCoachAgent:
             ):
                 profile["swing_issues"].append(issue)
 
-        # Detect goals
+        # Detect goals using keyword mapping
         goals_map = {
             "increase_distance": ["distance"],
             "improve_accuracy": ["accuracy"],
@@ -203,15 +248,21 @@ class GolfCoachAgent:
                 profile["goals"].append(goal)
 
     def _update_long_term_memory(self, golfer_id, input_text, response):
-        """Update long-term memory with important information"""
+        """
+        Selectively stores important information in long-term memory.
+
+        This is a key feature from Tutorial #2 (Memory-Enhanced Conversational Agent).
+        The system is selective about what it remembers to avoid memory overload,
+        focusing on longer inputs and responses with coaching-related keywords.
+        """
         if golfer_id not in self.long_term_memory:
             self.long_term_memory[golfer_id] = []
 
-        # Store longer inputs
+        # Store longer inputs as they likely contain important information
         if len(input_text) > 20:
             self.long_term_memory[golfer_id].append(f"Golfer asked: {input_text}")
 
-        # Store important coaching advice
+        # Store important coaching advice containing specific keywords
         if any(
             keyword in response.lower()
             for keyword in [
@@ -227,17 +278,23 @@ class GolfCoachAgent:
                 f"Coach advised: {response[:100]}..."
             )
 
-        # Limit memory size
+        # Limit memory size to prevent overflow
         if len(self.long_term_memory[golfer_id]) > 10:
             self.long_term_memory[golfer_id] = self.long_term_memory[golfer_id][-10:]
 
     def _reflect_and_improve(self, golfer_id):
-        """Analyze past interactions and generate insights for improvement"""
+        """
+        Analyzes past interactions to generate insights for improving coaching.
+
+        This is the key self-improvement feature from Tutorial #3 (Self-Improving Agent).
+        The coach periodically reviews past conversations to identify patterns and
+        improve future coaching advice.
+        """
         history = self.get_chat_history(golfer_id)
         if len(history.messages) < 4:  # Need at least 2 exchanges
             return
 
-        # Generate insights
+        # Create a prompt for the reflection process
         reflection_prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -251,31 +308,32 @@ class GolfCoachAgent:
             ]
         )
 
+        # Generate insights by analyzing previous conversations
         reflection_chain = reflection_prompt | self.llm
         insights = reflection_chain.invoke({"history": history.messages[-10:]}).content
 
-        # Store insights
+        # Store insights for future coaching
         if golfer_id not in self.coaching_insights:
             self.coaching_insights[golfer_id] = []
         self.coaching_insights[golfer_id].append(insights)
 
-        # Limit insights
+        # Limit number of stored insights
         if len(self.coaching_insights[golfer_id]) > 3:
             self.coaching_insights[golfer_id] = self.coaching_insights[golfer_id][-3:]
 
     # Helper methods
     def _get_profile_summary(self, golfer_id):
-        """Get a simple text summary of golfer profile"""
+        """Creates a simple text summary of the golfer's profile"""
         profile = self.golfer_profiles.get(golfer_id, {})
         return f"Skill level: {profile.get('skill_level', 'unknown')}, Interactions: {profile.get('interaction_count', 0)}"
 
     def _get_field_as_string(self, data_store, key, default=""):
-        """Convert a list from a data store to a string representation"""
+        """Helper method to convert a list from a data store to a string"""
         items = data_store.get(key, [])
         return ". ".join(items) if items else default
 
     def _load_json(self, filename):
-        """Load JSON data from a file"""
+        """Load JSON data from a file with error handling"""
         file_path = self.data_dir / filename
         if file_path.exists():
             try:
@@ -293,19 +351,23 @@ class GolfCoachAgent:
 
     # Data loading methods
     def _load_profiles(self):
+        """Load golfer profiles from disk"""
         self.golfer_profiles = self._load_json("golfer_profiles.json")
 
     def _load_last_interactions(self):
+        """Load record of last interactions from disk"""
         self.last_interactions = self._load_json("last_interactions.json")
 
     def _load_long_term_memory(self):
+        """Load long-term memory from disk"""
         self.long_term_memory = self._load_json("long_term_memory.json")
 
     def _load_coaching_insights(self):
+        """Load coaching insights from disk"""
         self.coaching_insights = self._load_json("coaching_insights.json")
 
     def _load_session_history(self):
-        """Load session history from disk"""
+        """Load conversation history from disk"""
         history_path = self.data_dir / "session_history.pkl"
         if history_path.exists():
             try:
@@ -314,22 +376,26 @@ class GolfCoachAgent:
             except (pickle.PickleError, EOFError):
                 self.session_store = {}
 
-    # Save all data
     def save_data(self):
-        """Save all data to disk"""
+        """
+        Save all coach data to disk.
+
+        This ensures that profiles, memories, and insights persist between sessions,
+        allowing the coach to provide continuity across conversations.
+        """
         self._save_json(self.golfer_profiles, "golfer_profiles.json")
         self._save_json(self.last_interactions, "last_interactions.json")
         self._save_json(self.long_term_memory, "long_term_memory.json")
         self._save_json(self.coaching_insights, "coaching_insights.json")
         self._save_json(self.coaching_knowledge, "coaching_knowledge.json")
 
-        # Save session history separately (pickle)
+        # Save session history separately (using pickle since it contains objects)
         history_path = self.data_dir / "session_history.pkl"
         with open(history_path, "wb") as f:
             pickle.dump(self.session_store, f)
 
 
-# Example usage
+# Example usage - Terminal Interface
 if __name__ == "__main__":
     # Get golfer ID with validation to prevent command names from being used as IDs
     reserved_commands = [
