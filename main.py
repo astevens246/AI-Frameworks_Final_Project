@@ -358,6 +358,44 @@ if __name__ == "__main__":
 
     coach = GolfCoachAgent()
 
+    # Prompt for skill level if this is a new user or skill level is unknown
+    if (
+        golfer_id not in coach.golfer_profiles
+        or "skill_level" not in coach.golfer_profiles.get(golfer_id, {})
+        or coach.golfer_profiles[golfer_id]["skill_level"] == "unknown"
+    ):
+        print("\nWhat is your golf skill level?")
+        print("1. Beginner (new to golf or just started)")
+        print("2. Intermediate (played for a few years)")
+        print("3. Advanced (low handicap or competitive player)")
+
+        while True:
+            skill_choice = input("Enter your choice (1-3): ").strip()
+            if skill_choice == "1":
+                skill_level = "beginner"
+                break
+            elif skill_choice == "2":
+                skill_level = "intermediate"
+                break
+            elif skill_choice == "3":
+                skill_level = "advanced"
+                break
+            else:
+                print("Please enter a valid choice (1-3)")
+
+        # Initialize profile if needed
+        if golfer_id not in coach.golfer_profiles:
+            coach.golfer_profiles[golfer_id] = {
+                "interaction_count": 0,
+                "swing_issues": [],
+                "goals": [],
+            }
+
+        # Set the skill level
+        coach.golfer_profiles[golfer_id]["skill_level"] = skill_level
+        print(f"\nThanks! Your skill level has been set to {skill_level}.")
+        coach.save_data()
+
     print("\n=== Golf Coach AI ===")
     print("Welcome to your personalized golf coaching session!")
     print("Ask me any questions about your golf game or type 'quit' to exit.")

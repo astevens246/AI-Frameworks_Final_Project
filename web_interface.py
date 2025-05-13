@@ -32,6 +32,7 @@ for key, default in [
     ("golfer_id", "default_user"),
     ("active_tab", "Chat"),
     ("show_memory", False),
+    ("skill_level_set", False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -56,6 +57,7 @@ with st.sidebar:
     if new_golfer_id != st.session_state.golfer_id:
         st.session_state.golfer_id = new_golfer_id
         st.session_state.messages = []
+        st.session_state.skill_level_set = False
         st.rerun()
 
     # Show profile info summary
@@ -108,6 +110,76 @@ def display_messages():
             f"<div class='{role}-message'>{content}</div>",
             unsafe_allow_html=True,
         )
+
+
+# Check if skill level needs to be set
+golfer_id = st.session_state.golfer_id
+needs_skill_level = (
+    golfer_id not in st.session_state.coach.golfer_profiles
+    or "skill_level" not in st.session_state.coach.golfer_profiles.get(golfer_id, {})
+    or st.session_state.coach.golfer_profiles[golfer_id]["skill_level"] == "unknown"
+) and not st.session_state.skill_level_set
+
+if needs_skill_level:
+    st.subheader("What is your golf skill level?")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button(
+            "Beginner", use_container_width=True, help="New to golf or just started"
+        ):
+            if golfer_id not in st.session_state.coach.golfer_profiles:
+                st.session_state.coach.golfer_profiles[golfer_id] = {
+                    "interaction_count": 0,
+                    "swing_issues": [],
+                    "goals": [],
+                }
+            st.session_state.coach.golfer_profiles[golfer_id][
+                "skill_level"
+            ] = "beginner"
+            st.session_state.coach.save_data()
+            st.session_state.skill_level_set = True
+            st.rerun()
+
+    with col2:
+        if st.button(
+            "Intermediate", use_container_width=True, help="Played for a few years"
+        ):
+            if golfer_id not in st.session_state.coach.golfer_profiles:
+                st.session_state.coach.golfer_profiles[golfer_id] = {
+                    "interaction_count": 0,
+                    "swing_issues": [],
+                    "goals": [],
+                }
+            st.session_state.coach.golfer_profiles[golfer_id][
+                "skill_level"
+            ] = "intermediate"
+            st.session_state.coach.save_data()
+            st.session_state.skill_level_set = True
+            st.rerun()
+
+    with col3:
+        if st.button(
+            "Advanced",
+            use_container_width=True,
+            help="Low handicap or competitive player",
+        ):
+            if golfer_id not in st.session_state.coach.golfer_profiles:
+                st.session_state.coach.golfer_profiles[golfer_id] = {
+                    "interaction_count": 0,
+                    "swing_issues": [],
+                    "goals": [],
+                }
+            st.session_state.coach.golfer_profiles[golfer_id][
+                "skill_level"
+            ] = "advanced"
+            st.session_state.coach.save_data()
+            st.session_state.skill_level_set = True
+            st.rerun()
+
+    st.markdown("Please select your skill level to get personalized coaching advice.")
+    st.stop()  # Stop execution until skill level is selected
 
 
 # CHAT TAB
